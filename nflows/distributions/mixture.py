@@ -18,8 +18,9 @@ class MADEMoG(Distribution):
         dropout_probability=0.0,
         use_batch_norm=False,
         custom_initialization=False,
+        **kargs
     ):
-        super().__init__()
+        super().__init__(**kargs)
 
         self._made = MixtureOfGaussiansMADE(
             features=features,

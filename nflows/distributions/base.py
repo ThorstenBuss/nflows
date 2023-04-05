@@ -16,6 +16,18 @@ class NoMeanException(Exception):
 class Distribution(nn.Module):
     """Base class for all distribution objects."""
 
+    def __init__(self, *args, as_tensor=True, **kargs) -> None:
+        super().__init__(*args, **kargs)
+        self._as_tensor = as_tensor
+
+    @property
+    def as_tensor(self):
+        return self._as_tensor
+
+    @as_tensor.setter
+    def as_tensor(self, value):
+        self._as_tensor = value
+
     def forward(self, *args):
         raise RuntimeError("Forward method cannot be called for a Distribution object.")
 
@@ -31,7 +43,7 @@ class Distribution(nn.Module):
             A Tensor of shape [input_size], the log probability of the inputs given the context.
         """
         inputs = torch.as_tensor(inputs)
-        if context is not None:
+        if context is not None and self._as_tensor:
             context = torch.as_tensor(context)
             if inputs.shape[0] != context.shape[0]:
                 raise ValueError(
@@ -63,7 +75,7 @@ class Distribution(nn.Module):
         if not check.is_positive_int(num_samples):
             raise TypeError("Number of samples must be a positive integer.")
 
-        if context is not None:
+        if context is not None and self._as_tensor:
             context = torch.as_tensor(context)
 
         if batch_size is None:
@@ -120,7 +132,7 @@ class Distribution(nn.Module):
         return samples, log_prob
 
     def mean(self, context=None):
-        if context is not None:
+        if context is not None and self._as_tensor:
             context = torch.as_tensor(context)
         return self._mean(context)
 

@@ -11,8 +11,8 @@ from nflows.utils import torchutils
 class StandardNormal(Distribution):
     """A multivariate Normal with zero mean and unit covariance."""
 
-    def __init__(self, shape):
-        super().__init__()
+    def __init__(self, shape, *args, **kargs):
+        super().__init__(*args, **kargs)
         self._shape = torch.Size(shape)
 
         self.register_buffer("_log_z",
@@ -53,7 +53,7 @@ class StandardNormal(Distribution):
 class ConditionalDiagonalNormal(Distribution):
     """A diagonal multivariate Normal whose parameters are functions of a context."""
 
-    def __init__(self, shape, context_encoder=None):
+    def __init__(self, shape, context_encoder=None, **kargs):
         """Constructor.
 
         Args:
@@ -61,7 +61,7 @@ class ConditionalDiagonalNormal(Distribution):
             context_encoder: callable or None, encodes the context to the distribution parameters.
                 If None, defaults to the identity function.
         """
-        super().__init__()
+        super().__init__(**kargs)
         self._shape = torch.Size(shape)
         if context_encoder is None:
             self._context_encoder = lambda x: x
@@ -135,7 +135,7 @@ class ConditionalDiagonalNormal(Distribution):
 class DiagonalNormal(Distribution):
     """A diagonal multivariate Normal with trainable parameters."""
 
-    def __init__(self, shape):
+    def __init__(self, shape, *args, **kargs):
         """Constructor.
 
         Args:
@@ -143,7 +143,7 @@ class DiagonalNormal(Distribution):
             context_encoder: callable or None, encodes the context to the distribution parameters.
                 If None, defaults to the identity function.
         """
-        super().__init__()
+        super().__init__(*args, **kargs)
         self._shape = torch.Size(shape)
         self.mean_ = nn.Parameter(torch.zeros(shape).reshape(1, -1))
         self.log_std_ = nn.Parameter(torch.zeros(shape).reshape(1, -1))

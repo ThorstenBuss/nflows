@@ -10,7 +10,7 @@ from nflows.utils import torchutils
 class ConditionalIndependentBernoulli(Distribution):
     """An independent Bernoulli whose parameters are functions of a context."""
 
-    def __init__(self, shape, context_encoder=None):
+    def __init__(self, shape, context_encoder=None, **kargs):
         """Constructor.
 
         Args:
@@ -18,7 +18,7 @@ class ConditionalIndependentBernoulli(Distribution):
             context_encoder: callable or None, encodes the context to the distribution parameters.
                 If None, defaults to the identity function.
         """
-        super().__init__()
+        super().__init__(**kargs)
         self._shape = torch.Size(shape)
         if context_encoder is None:
             self._context_encoder = lambda x: x
