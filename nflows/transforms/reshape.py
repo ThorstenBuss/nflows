@@ -18,13 +18,22 @@ class SqueezeTransform(Transform):
     def __init__(self, factor=2):
         super(SqueezeTransform, self).__init__()
 
-        if not check.is_int(factor) or factor <= 1:
-            raise ValueError("Factor must be an integer > 1.")
+        if check.is_int(factor):
+            factor = (factor, factor)
 
-        self.factor = factor
+        if check.is_list(factor):
+            factor = tuple(factor)
+
+        if not check.is_tuple_of_ints(factor) or len(factor)!=2:
+            raise ValueError("Factor must be an integer or tuple of two integers.")
+
+        if factor[0] < 1 or factor[1] < 1:
+            raise ValueError("Factors must be >= 1.")
+
+        self.factor_x, self.factor_y = factor
 
     def get_output_shape(self, c, h, w):
-        return (c * self.factor * self.factor, h // self.factor, w // self.factor)
+        return (c * self.factor_x * self.factor_y, h // self.factor_x, w // self.factor_y)
 
     def forward(self, inputs, context=None):
         if inputs.dim() != 4:
@@ -32,18 +41,18 @@ class SqueezeTransform(Transform):
 
         batch_size, c, h, w = inputs.size()
 
-        if h % self.factor != 0 or w % self.factor != 0:
+        if h % self.factor_x != 0 or w % self.factor_y != 0:
             raise ValueError("Input image size not compatible with the factor.")
 
         inputs = inputs.view(
-            batch_size, c, h // self.factor, self.factor, w // self.factor, self.factor
+            batch_size, c, h // self.factor_x, self.factor_x, w // self.factor_y, self.factor_y
         )
         inputs = inputs.permute(0, 1, 3, 5, 2, 4).contiguous()
         inputs = inputs.view(
             batch_size,
-            c * self.factor * self.factor,
-            h // self.factor,
-            w // self.factor,
+            c * self.factor_x * self.factor_y,
+            h // self.factor_x,
+            w // self.factor_y,
         )
 
         return inputs, inputs.new_zeros(batch_size)
@@ -58,11 +67,11 @@ class SqueezeTransform(Transform):
             raise ValueError("Invalid number of channel dimensions.")
 
         inputs = inputs.view(
-            batch_size, c // self.factor ** 2, self.factor, self.factor, h, w
+            batch_size, c // (self.factor_x * self.factor_y), self.factor_x, self.factor_y, h, w
         )
         inputs = inputs.permute(0, 1, 4, 2, 5, 3).contiguous()
         inputs = inputs.view(
-            batch_size, c // self.factor ** 2, h * self.factor, w * self.factor
+            batch_size, c // (self.factor_x * self.factor_y), h * self.factor_x, w * self.factor_y
         )
 
         return inputs, inputs.new_zeros(batch_size)
