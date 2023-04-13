@@ -27,6 +27,11 @@ class LinearCache:
         self.inverse = None
         self.logabsdet = None
 
+    def to(self, *args, **kwargs):
+        self.weight = self.weight.to(*args, **kwargs)
+        self.inverse = self.inverse.to(*args, **kwargs)
+        self.logabsdet = self.logabsdet.to(*args, **kwargs)
+
 
 class Linear(Transform):
     """Abstract base class for linear transforms that parameterize a weight matrix."""
