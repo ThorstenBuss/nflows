@@ -63,7 +63,7 @@ class SqueezeTransform(Transform):
 
         batch_size, c, h, w = inputs.size()
 
-        if c < 4 or c % 4 != 0:
+        if c%(self.factor_x * self.factor_y) != 0:
             raise ValueError("Invalid number of channel dimensions.")
 
         inputs = inputs.view(
