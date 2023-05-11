@@ -234,6 +234,14 @@ def cubic_spline(
         alpha = (-b + torch.sqrt(b.pow(2) - 4 * a * c)) / (2 * a)
         outputs[quadratic_mask] = alpha + input_left_cumwidths[quadratic_mask]
 
+        # Deal with a -> 0 and b -> 0 (almost linear) cases.
+
+        linear_mask = (inputs_a.abs() < quadratic_threshold) & (inputs_b.abs() < quadratic_threshold)
+        a = inputs_c[linear_mask]
+        b = inputs_d[linear_mask]
+        y = (inputs[linear_mask]-b)/a
+        outputs[linear_mask] = y + input_left_cumwidths[linear_mask]
+
         shifted_outputs = outputs - input_left_cumwidths
         logabsdet = -torch.log(
             (
