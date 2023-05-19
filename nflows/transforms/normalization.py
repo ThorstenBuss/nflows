@@ -1,4 +1,7 @@
 """Implementation of normalization-based transforms."""
+import itertools
+import math
+
 import numpy as np
 import torch
 from torch import nn
@@ -144,8 +147,8 @@ class BatchNorm(Transform):
 class ActNorm(Transform):
     def __init__(self, features):
         """
-        Transform that performs activation normalization. Works for 2D and 4D inputs. For 4D
-        inputs (images) normalization is performed per-channel, assuming BxCxHxW input shape.
+        Transform that performs activation normalization. Works for 2 or more dimensional inputs. For 3 or more
+        dimensional inputs normalization is performed per-channel, assuming BxCxHxW input shape.
 
         Reference:
         > D. Kingma et. al., Glow: Generative flow with invertible 1x1 convolutions, NeurIPS 2018.
@@ -163,14 +166,12 @@ class ActNorm(Transform):
         return torch.exp(self.log_scale)
 
     def _broadcastable_scale_shift(self, inputs):
-        if inputs.dim() == 4:
-            return self.scale.view(1, -1, 1, 1), self.shift.view(1, -1, 1, 1)
-        else:
-            return self.scale.view(1, -1), self.shift.view(1, -1)
+        broadcastable_shape = (1,-1)+tuple(itertools.repeat(1,inputs.dim()-2))
+        return self.scale.view(*broadcastable_shape), self.shift.view(*broadcastable_shape)
 
     def forward(self, inputs, context=None):
-        if inputs.dim() not in [2, 4]:
-            raise ValueError("Expecting inputs to be a 2D or a 4D tensor.")
+        if inputs.dim() < 2:
+            raise ValueError("Expecting inputs to be a 2 or more dimensional tensor.")
 
         if self.training and not self.initialized:
             self._initialize(inputs)
@@ -178,41 +179,29 @@ class ActNorm(Transform):
         scale, shift = self._broadcastable_scale_shift(inputs)
         outputs = scale * inputs + shift
 
-        if inputs.dim() == 4:
-            batch_size, _, h, w = inputs.shape
-            logabsdet = h * w * torch.sum(self.log_scale) * outputs.new_ones(batch_size)
-        else:
-            batch_size, _ = inputs.shape
-            logabsdet = torch.sum(self.log_scale) * outputs.new_ones(batch_size)
+        logabsdet = math.prod(inputs.shape[2:]) * torch.sum(self.log_scale) * outputs.new_ones(inputs.shape[0])
 
         return outputs, logabsdet
 
     def inverse(self, inputs, context=None):
-        if inputs.dim() not in [2, 4]:
-            raise ValueError("Expecting inputs to be a 2D or a 4D tensor.")
+        if inputs.dim() < 2:
+            raise ValueError("Expecting inputs to be a 2 or more dimensional tensor.")
 
         scale, shift = self._broadcastable_scale_shift(inputs)
         outputs = (inputs - shift) / scale
 
-        if inputs.dim() == 4:
-            batch_size, _, h, w = inputs.shape
-            logabsdet = -h * w * torch.sum(self.log_scale) * outputs.new_ones(batch_size)
-        else:
-            batch_size, _ = inputs.shape
-            logabsdet = -torch.sum(self.log_scale) * outputs.new_ones(batch_size)
+        logabsdet = -math.prod(inputs.shape[2:]) * torch.sum(self.log_scale) * outputs.new_ones(inputs.shape[0])
 
         return outputs, logabsdet
 
     def _initialize(self, inputs):
         """Data-dependent initialization, s.t. post-actnorm activations have zero mean and unit
         variance. """
-        if inputs.dim() == 4:
-            num_channels = inputs.shape[1]
-            inputs = inputs.permute(0, 2, 3, 1).reshape(-1, num_channels)
+        dims = (0,)+tuple(range(2,inputs.dim()))
 
         with torch.no_grad():
-            std = inputs.std(dim=0)
-            mu = (inputs / std).mean(dim=0)
+            std = inputs.std(dim=dims)
+            mu = inputs.mean(dim=dims)
             self.log_scale.data = -torch.log(std)
-            self.shift.data = -mu
+            self.shift.data = -mu/std
             self.initialized.data = torch.tensor(True, dtype=torch.bool)

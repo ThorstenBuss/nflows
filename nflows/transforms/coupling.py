@@ -71,7 +71,7 @@ class CouplingTransform(Transform):
         return len(self.transform_features)
 
     def forward(self, inputs, context=None):
-        if inputs.dim() not in [2, 4]:
+        if inputs.dim() < 2:
             raise ValueError("Inputs must be a 2D or a 4D tensor.")
 
         if inputs.shape[1] != self.features:
@@ -100,7 +100,7 @@ class CouplingTransform(Transform):
         return outputs, logabsdet
 
     def inverse(self, inputs, context=None):
-        if inputs.dim() not in [2, 4]:
+        if inputs.dim() < 2:
             raise ValueError("Inputs must be a 2D or a 4D tensor.")
 
         if inputs.shape[1] != self.features:
@@ -277,16 +277,9 @@ class PiecewiseCouplingTransform(CouplingTransform):
         return self._coupling_transform(inputs, transform_params, inverse=True)
 
     def _coupling_transform(self, inputs, transform_params, inverse=False):
-        if inputs.dim() == 4:
-            b, c, h, w = inputs.shape
-            # For images, reshape transform_params from Bx(C*?)xHxW to BxCxHxWx?
-            transform_params = transform_params.reshape(b, c, -1, h, w).permute(
-                0, 1, 3, 4, 2
-            )
-        elif inputs.dim() == 2:
-            b, d = inputs.shape
-            # For 2D data, reshape transform_params from Bx(D*?) to BxDx?
-            transform_params = transform_params.reshape(b, d, -1)
+        params_shape = inputs.shape[:2] + (-1,) + inputs.shape[2:]
+        permutation = (0,1) + tuple(range(3,len(params_shape))) + (2,)
+        transform_params = transform_params.reshape(*params_shape).permute(*permutation)
 
         outputs, logabsdet = self._piecewise_cdf(inputs, transform_params, inverse)
 

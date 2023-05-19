@@ -32,46 +32,68 @@ class SqueezeTransform(Transform):
 
         self.factor_x, self.factor_y = factor
 
-    def get_output_shape(self, c, h, w):
-        return (c * self.factor_x * self.factor_y, h // self.factor_x, w // self.factor_y)
+    def get_output_shape(self, *shape):
+        shape = list(shape)
+        shape[0]  = shape[0] * self.factor_x * self.factor_y
+        shape[-2] = shape[-2] // self.factor_x
+        shape[-1] = shape[-1] // self.factor_y
+        return tuple(shape)
 
     def forward(self, inputs, context=None):
-        if inputs.dim() != 4:
+        if inputs.dim() < 4:
             raise ValueError("Expecting inputs with 4 dimensions")
-
-        batch_size, c, h, w = inputs.size()
+        shape = inputs.size()
+        output_shape = self.get_output_shape(*(shape[1:]))
+        batch_size = shape[0]
+        h = shape[-2]
+        w = shape[-1]
 
         if h % self.factor_x != 0 or w % self.factor_y != 0:
             raise ValueError("Input image size not compatible with the factor.")
 
         inputs = inputs.view(
-            batch_size, c, h // self.factor_x, self.factor_x, w // self.factor_y, self.factor_y
+            *(shape[:-2]+(h // self.factor_x, self.factor_x, w // self.factor_y, self.factor_y))
         )
-        inputs = inputs.permute(0, 1, 3, 5, 2, 4).contiguous()
+        permutation = list(range(len(shape)+2))
+        permutation[2] = len(permutation)-3
+        permutation[3] = len(permutation)-1
+        permutation[-2] = len(permutation)-4
+        permutation[-1] = len(permutation)-2
+        permutation[4:-2] = list(range(2,len(permutation)-4))
+        inputs = inputs.permute(*permutation).contiguous()
         inputs = inputs.view(
             batch_size,
-            c * self.factor_x * self.factor_y,
-            h // self.factor_x,
-            w // self.factor_y,
+            *output_shape
         )
 
         return inputs, inputs.new_zeros(batch_size)
 
     def inverse(self, inputs, context=None):
-        if inputs.dim() != 4:
+        if inputs.dim() < 4:
             raise ValueError("Expecting inputs with 4 dimensions")
-
-        batch_size, c, h, w = inputs.size()
+        shape = inputs.size()
+        batch_size = shape[0]
+        c = shape[1]
+        h = shape[-2]
+        w = shape[-1]
+        shape_out = list(shape)
+        shape_out[1]  = c // self.factor_x // self.factor_y
+        shape_out[-2] = h * self.factor_x
+        shape_out[-1] = w * self.factor_y
 
         if c%(self.factor_x * self.factor_y) != 0:
             raise ValueError("Invalid number of channel dimensions.")
 
         inputs = inputs.view(
-            batch_size, c // (self.factor_x * self.factor_y), self.factor_x, self.factor_y, h, w
+            batch_size, c // (self.factor_x * self.factor_y), self.factor_x, self.factor_y, *(shape[2:])
         )
-        inputs = inputs.permute(0, 1, 4, 2, 5, 3).contiguous()
-        inputs = inputs.view(
-            batch_size, c // (self.factor_x * self.factor_y), h * self.factor_x, w * self.factor_y
-        )
+        permutation = list(range(len(shape)+2))
+        permutation[-4] = len(permutation)-2
+        permutation[-3] = 2
+        permutation[-2] = len(permutation)-1
+        permutation[-1] = 3
+        permutation[2:-4] = list(range(4,len(permutation)-2))
+        inputs = inputs.permute(*permutation).contiguous()
+        inputs = inputs.view(*shape_out)
 
         return inputs, inputs.new_zeros(batch_size)

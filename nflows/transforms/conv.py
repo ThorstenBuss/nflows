@@ -15,21 +15,23 @@ class OneByOneConvolution(LULinear):
         self.permutation = RandomPermutation(num_channels, dim=1)
 
     def _lu_forward_inverse(self, inputs, inverse=False):
-        b, c, h, w = inputs.shape
-        inputs = inputs.permute(0, 2, 3, 1).reshape(b * h * w, c)
+        shape = inputs.shape[:1] + inputs.shape[2:] + inputs.shape[1:2]
+        permutation = (0,) + tuple(range(2,inputs.dim())) + (1,)
+        inverse_perm = (0,inputs.dim()-1) + tuple(range(1,inputs.dim()-1))
+        inputs = inputs.permute(*permutation).reshape(-1, shape[-1])
 
         if inverse:
             outputs, logabsdet = super().inverse(inputs)
         else:
             outputs, logabsdet = super().forward(inputs)
 
-        outputs = outputs.reshape(b, h, w, c).permute(0, 3, 1, 2)
-        logabsdet = logabsdet.reshape(b, h, w)
+        outputs = outputs.reshape(*shape).permute(*inverse_perm)
+        logabsdet = logabsdet.reshape(*(shape[:-1]))
 
         return outputs, torchutils.sum_except_batch(logabsdet)
 
     def forward(self, inputs, context=None):
-        if inputs.dim() != 4:
+        if inputs.dim() < 2:
             raise ValueError("Inputs must be a 4D tensor.")
 
         inputs, _ = self.permutation(inputs)
@@ -37,7 +39,7 @@ class OneByOneConvolution(LULinear):
         return self._lu_forward_inverse(inputs, inverse=False)
 
     def inverse(self, inputs, context=None):
-        if inputs.dim() != 4:
+        if inputs.dim() < 2:
             raise ValueError("Inputs must be a 4D tensor.")
 
         outputs, logabsdet = self._lu_forward_inverse(inputs, inverse=True)
