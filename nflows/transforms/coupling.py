@@ -1,7 +1,7 @@
 """Implementations of various coupling layers."""
 import warnings
+import math
 
-import numpy as np
 import torch
 from torch.nn.functional import softplus
 
@@ -398,8 +398,8 @@ class PiecewiseQuadraticCouplingTransform(PiecewiseCouplingTransform):
         unnormalized_heights = transform_params[..., self.num_bins :]
 
         if hasattr(self.transform_net, "hidden_features"):
-            unnormalized_widths /= np.sqrt(self.transform_net.hidden_features)
-            unnormalized_heights /= np.sqrt(self.transform_net.hidden_features)
+            unnormalized_widths /= math.sqrt(self.transform_net.hidden_features)
+            unnormalized_heights /= math.sqrt(self.transform_net.hidden_features)
 
         if self.tails is None:
             spline_fn = splines.quadratic_spline
@@ -469,8 +469,8 @@ class PiecewiseCubicCouplingTransform(PiecewiseCouplingTransform):
         ]
 
         if hasattr(self.transform_net, "hidden_features"):
-            unnormalized_widths /= np.sqrt(self.transform_net.hidden_features)
-            unnormalized_heights /= np.sqrt(self.transform_net.hidden_features)
+            unnormalized_widths /= math.sqrt(self.transform_net.hidden_features)
+            unnormalized_heights /= math.sqrt(self.transform_net.hidden_features)
 
         if self.tails is None:
             spline_fn = splines.cubic_spline
@@ -505,6 +505,7 @@ class PiecewiseRationalQuadraticCouplingTransform(PiecewiseCouplingTransform):
         min_bin_width=splines.rational_quadratic.DEFAULT_MIN_BIN_WIDTH,
         min_bin_height=splines.rational_quadratic.DEFAULT_MIN_BIN_HEIGHT,
         min_derivative=splines.rational_quadratic.DEFAULT_MIN_DERIVATIVE,
+        enable_identity_init=False,
     ):
 
         self.num_bins = num_bins
@@ -513,6 +514,7 @@ class PiecewiseRationalQuadraticCouplingTransform(PiecewiseCouplingTransform):
         self.min_derivative = min_derivative
         self.tails = tails
         self.tail_bound = tail_bound
+        self.enable_identity_init = enable_identity_init
 
         if apply_unconditional_transform:
             unconditional_transform = lambda features: PiecewiseRationalQuadraticCDF(
@@ -523,6 +525,7 @@ class PiecewiseRationalQuadraticCouplingTransform(PiecewiseCouplingTransform):
                 min_bin_width=min_bin_width,
                 min_bin_height=min_bin_height,
                 min_derivative=min_derivative,
+                identity_init=self.enable_identity_init,
             )
         else:
             unconditional_transform = None
@@ -545,11 +548,11 @@ class PiecewiseRationalQuadraticCouplingTransform(PiecewiseCouplingTransform):
         unnormalized_derivatives = transform_params[..., 2 * self.num_bins :]
 
         if hasattr(self.transform_net, "hidden_features"):
-            unnormalized_widths /= np.sqrt(self.transform_net.hidden_features)
-            unnormalized_heights /= np.sqrt(self.transform_net.hidden_features)
+            unnormalized_widths /= math.sqrt(self.transform_net.hidden_features)
+            unnormalized_heights /= math.sqrt(self.transform_net.hidden_features)
         elif hasattr(self.transform_net, "hidden_channels"):
-            unnormalized_widths /= np.sqrt(self.transform_net.hidden_channels)
-            unnormalized_heights /= np.sqrt(self.transform_net.hidden_channels)
+            unnormalized_widths /= math.sqrt(self.transform_net.hidden_channels)
+            unnormalized_heights /= math.sqrt(self.transform_net.hidden_channels)
         else:
             warnings.warn(
                 "Inputs to the softmax are not scaled down: initialization might be bad."
@@ -561,6 +564,7 @@ class PiecewiseRationalQuadraticCouplingTransform(PiecewiseCouplingTransform):
         else:
             spline_fn = splines.unconstrained_rational_quadratic_spline
             spline_kwargs = {"tails": self.tails, "tail_bound": self.tail_bound}
+        spline_kwargs['enable_identity_init'] = self.enable_identity_init
 
         return spline_fn(
             inputs=inputs,

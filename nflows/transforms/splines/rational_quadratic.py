@@ -1,4 +1,4 @@
-import numpy as np
+import math
 import torch
 from torch.nn import functional as F
 
@@ -31,7 +31,7 @@ def unconstrained_rational_quadratic_spline(
 
     if tails == "linear":
         unnormalized_derivatives = F.pad(unnormalized_derivatives, pad=(1, 1))
-        constant = np.log(np.exp(1 - min_derivative) - 1)
+        constant = math.log(math.exp(1 - min_derivative) - 1)
         unnormalized_derivatives[..., 0] = constant
         unnormalized_derivatives[..., -1] = constant
 
@@ -98,7 +98,7 @@ def rational_quadratic_spline(
     widths = cumwidths[..., 1:] - cumwidths[..., :-1]
 
     if enable_identity_init: #flow is the identity if initialized with parameters equal to zero
-        beta = np.log(2) / (1 - min_derivative)
+        beta = math.log(2) / (1 - min_derivative)
     else: #backward compatibility
         beta = 1
     derivatives = min_derivative + F.softplus(unnormalized_derivatives, beta=beta)
@@ -139,7 +139,8 @@ def rational_quadratic_spline(
         c = -input_delta * (inputs - input_cumheights)
 
         discriminant = b.pow(2) - 4 * a * c
-        assert (discriminant >= 0).all()
+        # numerical instabilities result in small negative numbers sometimes
+        discriminant[discriminant<0.0] = 0.0
 
         root = (2 * c) / (-b - torch.sqrt(discriminant))
         # root = (- b + torch.sqrt(discriminant)) / (2 * a)
