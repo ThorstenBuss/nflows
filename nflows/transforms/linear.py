@@ -11,26 +11,22 @@ from nflows.utils import torchutils
 import nflows.utils.typechecks as check
 
 
-class LinearCache:
+class LinearCache(nn.Module):
     """Helper class to store the cache of a linear transform.
 
     The cache consists of: the weight matrix, its inverse and its log absolute determinant.
     """
 
     def __init__(self):
-        self.weight = None
-        self.inverse = None
-        self.logabsdet = None
+        super().__init__()
+        self.register_buffer('weight', None, False)
+        self.register_buffer('inverse', None, False)
+        self.register_buffer('logabsdet', None, False)
+        self.invalidate()
 
     def invalidate(self):
-        self.weight = None
-        self.inverse = None
-        self.logabsdet = None
-
-    def to(self, *args, **kwargs):
-        self.weight = self.weight.to(*args, **kwargs)
-        self.inverse = self.inverse.to(*args, **kwargs)
-        self.logabsdet = self.logabsdet.to(*args, **kwargs)
+        self.forward_valid = False
+        self.inverse_valid = False
 
 
 class Linear(Transform):
@@ -58,14 +54,9 @@ class Linear(Transform):
             return self.forward_no_cache(inputs)
 
     def _check_forward_cache(self):
-        if self.cache.weight is None and self.cache.logabsdet is None:
+        if not self.cache.forward_valid:
             self.cache.weight, self.cache.logabsdet = self.weight_and_logabsdet()
-
-        elif self.cache.weight is None:
-            self.cache.weight = self.weight()
-
-        elif self.cache.logabsdet is None:
-            self.cache.logabsdet = self.logabsdet()
+            self.cache.forward_valid = True
 
     def inverse(self, inputs, context=None):
         if not self.training and self.using_cache:
@@ -77,17 +68,12 @@ class Linear(Transform):
             return self.inverse_no_cache(inputs)
 
     def _check_inverse_cache(self):
-        if self.cache.inverse is None and self.cache.logabsdet is None:
+        if not self.cache.inverse_valid:
             (
                 self.cache.inverse,
                 self.cache.logabsdet,
             ) = self.weight_inverse_and_logabsdet()
-
-        elif self.cache.inverse is None:
-            self.cache.inverse = self.weight_inverse()
-
-        elif self.cache.logabsdet is None:
-            self.cache.logabsdet = self.logabsdet()
+            self.cache.inverse_valid = True
 
     def train(self, mode=True):
         if mode:
