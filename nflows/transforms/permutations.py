@@ -44,6 +44,9 @@ class Permutation(Transform):
     def inverse(self, inputs, context=None):
         return self._permute(inputs, self._inverse_permutation, self._dim)
 
+    def extra_repr(self):
+        return f'dim={self._dim}, permutation={list(self._permutation)}'
+
 
 class RandomPermutation(Permutation):
     """Permutes using a random, but fixed, permutation. Only works with 1D inputs."""
