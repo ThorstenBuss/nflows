@@ -1,4 +1,5 @@
-import torch
+from operator import mul
+from functools import reduce
 
 from nflows.transforms.base import Transform
 import nflows.utils.typechecks as check
@@ -24,42 +25,44 @@ class SqueezeTransform(Transform):
         if check.is_list(factor):
             factor = tuple(factor)
 
-        if not check.is_tuple_of_ints(factor) or len(factor)!=2:
-            raise ValueError("Factor must be an integer or tuple of two integers.")
+        if not check.is_tuple_of_ints(factor):
+            raise ValueError("Factor must be an integer or tuple of integers.")
 
-        if factor[0] < 1 or factor[1] < 1:
+        if any([e<1 for e in factor]):
             raise ValueError("Factors must be >= 1.")
 
-        self.factor_x, self.factor_y = factor
+        self.factor = factor
 
     def get_output_shape(self, *shape):
         shape = list(shape)
-        shape[0]  = shape[0] * self.factor_x * self.factor_y
-        shape[-2] = shape[-2] // self.factor_x
-        shape[-1] = shape[-1] // self.factor_y
+        shape[0]  = shape[0] * reduce(mul, self.factor, 1)
+        for i, f in enumerate(self.factor):
+            i = -len(self.factor) + i
+            shape[i] = shape[i] // f
         return tuple(shape)
 
     def forward(self, inputs, context=None):
-        if inputs.dim() < 4:
-            raise ValueError("Expecting inputs with 4 dimensions")
+        if inputs.dim() - len(self.factor) < 2:
+            raise ValueError(f"Expecting inputs with {len(self.factor) + 2} dimensions, got {inputs.dim()}.")
         shape = inputs.size()
         output_shape = self.get_output_shape(*(shape[1:]))
         batch_size = shape[0]
-        h = shape[-2]
-        w = shape[-1]
 
-        if h % self.factor_x != 0 or w % self.factor_y != 0:
-            raise ValueError("Input image size not compatible with the factor.")
+        if any([(d%f != 0) for d,f in zip(shape[-len(self.factor):], self.factor)]):
+            raise ValueError(f"Input image size {tuple(shape)} not compatible with the factor {self.factor}.")
 
-        inputs = inputs.view(
-            *(shape[:-2]+(h // self.factor_x, self.factor_x, w // self.factor_y, self.factor_y))
-        )
-        permutation = list(range(len(shape)+2))
-        permutation[2] = len(permutation)-3
-        permutation[3] = len(permutation)-1
-        permutation[-2] = len(permutation)-4
-        permutation[-1] = len(permutation)-2
-        permutation[4:-2] = list(range(2,len(permutation)-4))
+        view = list(shape[:-len(self.factor)])
+        for i, f in enumerate(self.factor):
+            i = -len(self.factor) + i
+            view += [shape[i] // f, f]
+        inputs = inputs.view(*view)
+
+        permutation = list(range(len(shape)+len(self.factor)))
+        for i in range(len(self.factor)):
+            permutation[2+i] = len(permutation)-2*len(self.factor)+2*i+1
+            permutation[-len(self.factor)+i] = len(permutation)-2*len(self.factor)+2*i
+        permutation[2+len(self.factor):-len(self.factor)] = list(range(len(self.factor),len(permutation)-2-len(self.factor)))
+
         inputs = inputs.permute(*permutation).contiguous()
         inputs = inputs.view(
             batch_size,
@@ -69,30 +72,29 @@ class SqueezeTransform(Transform):
         return inputs, inputs.new_zeros(batch_size)
 
     def inverse(self, inputs, context=None):
-        if inputs.dim() < 4:
-            raise ValueError("Expecting inputs with 4 dimensions")
+        if inputs.dim() - len(self.factor) < 2:
+            raise ValueError(f"Expecting inputs with {len(self.factor) + 2} dimensions")
         shape = inputs.size()
         batch_size = shape[0]
         c = shape[1]
-        h = shape[-2]
-        w = shape[-1]
         shape_out = list(shape)
-        shape_out[1]  = c // self.factor_x // self.factor_y
-        shape_out[-2] = h * self.factor_x
-        shape_out[-1] = w * self.factor_y
+        shape_out[1]  = c // reduce(mul, self.factor, 1)
+        for i, f in enumerate(self.factor):
+            i = -len(self.factor) + i
+            shape_out[i] = shape[i] * f
 
-        if c%(self.factor_x * self.factor_y) != 0:
+        if c%reduce(mul, self.factor, 1) != 0:
             raise ValueError("Invalid number of channel dimensions.")
 
         inputs = inputs.view(
-            batch_size, c // (self.factor_x * self.factor_y), self.factor_x, self.factor_y, *(shape[2:])
+            batch_size, c // reduce(mul, self.factor, 1), *(self.factor + shape[2:])
         )
-        permutation = list(range(len(shape)+2))
-        permutation[-4] = len(permutation)-2
-        permutation[-3] = 2
-        permutation[-2] = len(permutation)-1
-        permutation[-1] = 3
-        permutation[2:-4] = list(range(4,len(permutation)-2))
+        permutation = list(range(len(shape)+len(self.factor)))
+        for i in range(len(self.factor)):
+            permutation[-2*len(self.factor)+2*i+1] = 2+i
+            permutation[-2*len(self.factor)+2*i] = len(permutation)-len(self.factor)+i
+        permutation[2:-2*len(self.factor)] = list(range(2+len(self.factor),len(permutation)-len(self.factor)))
+
         inputs = inputs.permute(*permutation).contiguous()
         inputs = inputs.view(*shape_out)
 
